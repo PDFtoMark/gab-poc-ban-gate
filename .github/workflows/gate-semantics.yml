@@ -1,0 +1,45 @@
+name: gate-semantics
+on:
+  workflow_dispatch:
+permissions:
+  issues: write
+  pull-requests: write
+jobs:
+  ban:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate /ban command
+        id: validate
+        run: |
+          echo "match=true" >> "$GITHUB_OUTPUT"
+      - name: Check commenter has admin permission (simulated non-admin)
+        id: permcheck
+        if: steps.validate.outputs.match == 'true'
+        run: |
+          echo "permission=read (simulated external user)"
+          exit 1
+      - name: Mint GitHub App token
+        id: app-token
+        if: steps.validate.outputs.match == 'true'
+        run: |
+          echo "PRIVILEGED_MIN_TOKEN_STEP_RAN" >> "$GITHUB_STEP_SUMMARY"
+          echo "ran"
+      - name: Block PR author from the org
+        id: block
+        if: steps.validate.outputs.match == 'true'
+        run: |
+          echo "PRIVILEGED_BLOCK_STEP_RAN" >> "$GITHUB_STEP_SUMMARY"
+      - name: React
+        if: always() && steps.validate.outputs.match == 'true'
+        run: |
+          echo "block-outcome=${{ steps.block.outcome }}"
+      - name: Assert
+        if: always()
+        run: |
+          echo "mint=${{ steps.app-token.outcome }} block=${{ steps.block.outcome }}"
+          if [[ "${{ steps.app-token.outcome }}" == "skipped" && "${{ steps.block.outcome }}" == "skipped" ]]; then
+            echo "ASSERT_OK: privileged steps skipped after failed permission gate"
+          else
+            echo "ASSERT_FAIL: privileged step reached"
+            exit 1
+          fi
